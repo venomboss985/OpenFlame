@@ -3,11 +3,13 @@
 // #include <Fonts/FreeMono9pt7b.h> // Maybe use another font? (this one is kinda huge, more testing is needed)
 #include <Adafruit_MLX90640.h>  // Thermal camera
 
-#define PIXEL_WIDTH 5
-#define PIXEL_HEIGHT 5
+// Thermal frame
+#define FRAME_WIDTH 32
+#define FRAME_HEIGHT 24
 
-#define MIN_TEMP 20 // Lower temp -> More blue
-#define MAX_TEMP 35 // Higher temp -> More red
+// Render frame
+#define RENDER_WIDTH_SCALE 5
+#define RENDER_HEIGHT_SCALE 5
 
 // Colors for displaying thermal image (update to generate colour range on the fly and with set bit-depths)
 const uint16_t camColors[] = {0x480F,
@@ -45,6 +47,7 @@ enum mode_enum {
   FUNC_MIRROR,
   FUNC_MAXTEMP,
   FUNC_MINTEMP,
+  FUNC_AUTO,
   FUNC_REFRESH,
   FUNC_RENDER,
 };
@@ -53,6 +56,7 @@ char mode_strs[8][8] = {
   "MIRROR",
   "MAXTEMP",
   "MINTEMP",
+  "AUTO",
   "REFRESH",
   "RENDER",
 };
@@ -67,14 +71,16 @@ Adafruit_MAX17048 batt; // Check out other functions, this PMIC is really cool
 // Display objects
 float fps = 0;
 uint8_t mspf = 0;
-GFXcanvas16 therm_frame(32*PIXEL_WIDTH, 24*PIXEL_HEIGHT); // Thermal camera frame
-GFXcanvas16 stats(240-32*PIXEL_WIDTH, 135-15); // Status and settings menu
+GFXcanvas16 therm_frame(FRAME_WIDTH*RENDER_WIDTH_SCALE, FRAME_HEIGHT*RENDER_HEIGHT_SCALE); // Thermal camera frame
+GFXcanvas16 stats(240-FRAME_WIDTH*RENDER_WIDTH_SCALE, 135-15); // Status and settings menu
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
 
 // Thermal cam objects
-int16_t min_temp = MIN_TEMP;
-int16_t max_temp = MAX_TEMP;
-float frame[32*24]; // Thermal frame buffer
+int16_t min_temp = 20;
+int16_t max_temp = 35;
+bool auto_mode = false;
+float min_max_pad = 1.05;
+float frame[FRAME_WIDTH*FRAME_HEIGHT]; // Thermal frame buffer
 char render_strs[2][6] = { "INTLC", "CHESS" };
 uint8_t refresh_rates[8] = {0, 1, 2, 4, 8, 16, 32, 64};
 Adafruit_MLX90640 mlx; // Thermal camera
@@ -109,11 +115,13 @@ void handleMode() {
         case FUNC_RENDER:
           mlx.setMode(MLX90640_CHESS); break;
         case FUNC_MINTEMP:
-          min_temp++; break;
+          if (!auto_mode) { min_temp++; } break;
         case FUNC_MAXTEMP:
-          max_temp++; break;
+          if (!auto_mode) { max_temp++; } break;
         case FUNC_REFRESH:
           mlx.setRefreshRate(MLX90640_16_HZ); break;
+        case FUNC_AUTO:
+          auto_mode = true; break;
       }
       delay(50); // vTaskDelay()
     }
@@ -123,11 +131,13 @@ void handleMode() {
         case FUNC_RENDER:
           mlx.setMode(MLX90640_INTERLEAVED); break;
         case FUNC_MINTEMP:
-          min_temp--; break;
+          if (!auto_mode) { min_temp--; } break;
         case FUNC_MAXTEMP:
-          max_temp--; break;
+          if (!auto_mode) { max_temp--; } break;
         case FUNC_REFRESH:
           mlx.setRefreshRate(MLX90640_8_HZ); break;
+        case FUNC_AUTO:
+          auto_mode = false; break;
       }
       delay(50); // vTaskDelay()
     }
@@ -137,7 +147,7 @@ void handleMode() {
 // Draw the stats menu (13 characters @ 15 lines max)
 void drawStats() {
   stats.fillScreen(ST77XX_BLACK);
-  // stats.drawRect(0, 0, 240-32*PIXEL_WIDTH, 135-15, ST77XX_WHITE); // Stats/menu area
+  // stats.drawRect(0, 0, 240-FRAME_WIDTH*RENDER_WIDTH_SCALE, 135-15, ST77XX_WHITE); // Stats/menu area
   stats.setCursor(0, 0); // Set cursor to 1, 1 if drawing bounding box
 
   // Change battery % colour
@@ -160,6 +170,7 @@ void drawStats() {
   stats.printf("Mode: %s\n", mode_strs[mode_func]); stats.println();
   stats.printf("Render: %s\n", render_strs[mlx.getMode()]);
   stats.printf("Refresh: %dHz\n", refresh_rates[mlx.getRefreshRate()]);
+  stats.printf("Auto Range: %d\n", auto_mode);
   stats.printf("Min Temp: %d\nMax Temp: %d\n", min_temp, max_temp);
 
   // Print the framerate in the bottom right
@@ -168,25 +179,41 @@ void drawStats() {
   stats.setCursor(0, 112);
   stats.printf("FT (ms): %d", mspf);
 
-  tft.drawRGBBitmap(32*PIXEL_WIDTH, 15, stats.getBuffer(), stats.width(), stats.height());
+  tft.drawRGBBitmap(FRAME_WIDTH*RENDER_WIDTH_SCALE, 15, stats.getBuffer(), stats.width(), stats.height());
 }
 
 // Draws the frame from the thermal camera to the display
-void drawThermalFrame(int16_t min, int16_t max) {
+void drawThermalFrame() {
   // Get a frame from the camera
   mlx.getFrame(frame);
 
+  if (auto_mode) {
+    // Automatically find hotspot and coldspot values and set as the new range
+    int16_t hottest = -500;
+    int16_t coldest =  500;
+
+    for (uint16_t i=0; i < FRAME_WIDTH*FRAME_HEIGHT; i++) {
+      if (frame[i] > hottest) { hottest = (int16_t)frame[i] * min_max_pad; }
+      if (frame[i] < coldest) { coldest = (int16_t)frame[i] * min_max_pad; }
+    }
+
+    max_temp = hottest;
+    min_temp = coldest;
+  }
+
   // Update the screen buffer
-  for (uint8_t h=0; h<24; h++) {
-    for (uint8_t w=0; w<32; w++) {
+  for (uint8_t h=0; h<FRAME_HEIGHT; h++) {
+    for (uint8_t w=0; w<FRAME_WIDTH; w++) {
       // Read a temperature and clamp it between set temperature range
-      float t = frame[h*32 + w];
-      t = constrain(t, min, max);
+      float t = frame[h*FRAME_WIDTH + w];
+      t = constrain(t, min_temp, max_temp);
+
       // Map the colour index to a colour and draw the pixel
-      uint8_t colorIndex = map(t, min, max, 0, 255);
-      therm_frame.fillRect((32*PIXEL_WIDTH-PIXEL_WIDTH)-(PIXEL_WIDTH * w), (PIXEL_HEIGHT * h), PIXEL_WIDTH, PIXEL_HEIGHT, camColors[colorIndex]);
+      uint8_t colorIndex = map(t, min_temp, max_temp, 0, 255);
+      therm_frame.fillRect((FRAME_WIDTH*RENDER_WIDTH_SCALE-RENDER_WIDTH_SCALE)-(RENDER_WIDTH_SCALE * w), (RENDER_HEIGHT_SCALE * h), RENDER_WIDTH_SCALE, RENDER_HEIGHT_SCALE, camColors[colorIndex]);
     }
   }
+
   // Draw the frame buffer to the screen
   tft.drawRGBBitmap(0, 15, therm_frame.getBuffer(), therm_frame.width(), therm_frame.height());
 }
@@ -208,8 +235,8 @@ void setup() {
   /* DISPLAY INIT */
   Serial.println("Setting up display...");
   pinMode(TFT_BACKLITE, OUTPUT);
-  digitalWrite(TFT_BACKLITE, HIGH);
   pinMode(TFT_I2C_POWER, OUTPUT);
+  digitalWrite(TFT_BACKLITE, HIGH);
   digitalWrite(TFT_I2C_POWER, HIGH);
   delay(10);
 
@@ -249,12 +276,9 @@ void loop() {
   drawStats();
 
   // Draw the thermal camera frame on the display
-  drawThermalFrame(min_temp, max_temp);
+  drawThermalFrame();
 
   uint32_t end = millis();
   fps = 2000.0 / (end - start);
   mspf = (end - start) / 2;
-  
-  // Serial.print((end-start) / 2); Serial.println(" ms per frame (2 frames per display)");
-  // Serial.print(2000.0 / (end-start)); Serial.println(" FPS (2 frames per display)");
 }
