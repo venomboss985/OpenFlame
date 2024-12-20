@@ -10,6 +10,7 @@
 // Render frame
 #define RENDER_WIDTH_SCALE 5
 #define RENDER_HEIGHT_SCALE 5
+#define AUTO_UPDATE_INTV 2
 
 // Colors for displaying thermal image (update to generate colour range on the fly and with set bit-depths)
 const uint16_t camColors[] = {0x480F,
@@ -71,6 +72,7 @@ Adafruit_MAX17048 batt; // Check out other functions, this PMIC is really cool
 // Display objects
 float fps = 0;
 uint8_t mspf = 0;
+uint8_t frame_count = 0;
 GFXcanvas16 therm_frame(FRAME_WIDTH*RENDER_WIDTH_SCALE, FRAME_HEIGHT*RENDER_HEIGHT_SCALE); // Thermal camera frame
 GFXcanvas16 stats(240-FRAME_WIDTH*RENDER_WIDTH_SCALE, 135-15); // Status and settings menu
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
@@ -78,7 +80,7 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
 // Thermal cam objects
 int16_t min_temp = 20;
 int16_t max_temp = 35;
-bool auto_mode = false;
+bool auto_range = false;
 float min_max_pad = 1.05;
 float frame[FRAME_WIDTH*FRAME_HEIGHT]; // Thermal frame buffer
 char render_strs[2][6] = { "INTLC", "CHESS" };
@@ -115,13 +117,13 @@ void handleMode() {
         case FUNC_RENDER:
           mlx.setMode(MLX90640_CHESS); break;
         case FUNC_MINTEMP:
-          if (!auto_mode) { min_temp++; } break;
+          if (!auto_range) { min_temp++; } break;
         case FUNC_MAXTEMP:
-          if (!auto_mode) { max_temp++; } break;
+          if (!auto_range) { max_temp++; } break;
         case FUNC_REFRESH:
           mlx.setRefreshRate(MLX90640_16_HZ); break;
         case FUNC_AUTO:
-          auto_mode = true; break;
+          auto_range = true; break;
       }
       delay(50); // vTaskDelay()
     }
@@ -131,13 +133,13 @@ void handleMode() {
         case FUNC_RENDER:
           mlx.setMode(MLX90640_INTERLEAVED); break;
         case FUNC_MINTEMP:
-          if (!auto_mode) { min_temp--; } break;
+          if (!auto_range) { min_temp--; } break;
         case FUNC_MAXTEMP:
-          if (!auto_mode) { max_temp--; } break;
+          if (!auto_range) { max_temp--; } break;
         case FUNC_REFRESH:
           mlx.setRefreshRate(MLX90640_8_HZ); break;
         case FUNC_AUTO:
-          auto_mode = false; break;
+          auto_range = false; break;
       }
       delay(50); // vTaskDelay()
     }
@@ -170,7 +172,7 @@ void drawStats() {
   stats.printf("Mode: %s\n", mode_strs[mode_func]); stats.println();
   stats.printf("Render: %s\n", render_strs[mlx.getMode()]);
   stats.printf("Refresh: %dHz\n", refresh_rates[mlx.getRefreshRate()]);
-  stats.printf("Auto Range: %d\n", auto_mode);
+  stats.printf("Auto Range: %d\n", auto_range);
   stats.printf("Min Temp: %d\nMax Temp: %d\n", min_temp, max_temp);
 
   // Print the framerate in the bottom right
@@ -184,11 +186,8 @@ void drawStats() {
 
 // Draws the frame from the thermal camera to the display
 void drawThermalFrame() {
-  // Get a frame from the camera
-  mlx.getFrame(frame);
-
   // Automatically find hotspot and coldspot values and set as the new range
-  if (auto_mode) {
+  if (auto_range && frame_count % AUTO_UPDATE_INTV == 0) {
     int16_t hottest = -500;
     int16_t coldest =  500;
 
@@ -216,6 +215,8 @@ void drawThermalFrame() {
 
   // Draw the frame buffer to the screen
   tft.drawRGBBitmap(0, 15, therm_frame.getBuffer(), therm_frame.width(), therm_frame.height());
+  frame_count++;
+  if (frame_count > 99) { frame_count = 0; }
 }
 
 void setup() {
@@ -288,7 +289,8 @@ void loop() {
   // Update the stats menu
   drawStats();
 
-  // Draw the thermal camera frame on the display
+  // Get the thermal camera frame and update the display
+  mlx.getFrame(frame);
   drawThermalFrame();
 
   uint32_t end = millis();
