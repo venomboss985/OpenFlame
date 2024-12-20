@@ -187,8 +187,8 @@ void drawThermalFrame() {
   // Get a frame from the camera
   mlx.getFrame(frame);
 
+  // Automatically find hotspot and coldspot values and set as the new range
   if (auto_mode) {
-    // Automatically find hotspot and coldspot values and set as the new range
     int16_t hottest = -500;
     int16_t coldest =  500;
 
@@ -260,6 +260,19 @@ void setup() {
     mlx.setRefreshRate(MLX90640_16_HZ); // Max ~20 FPS at 32Hz with frequent lows hitting 16 FPS, keep at 16Hz for stability (maybe test 64Hz with Teensy or Pi? be wary of I2C clock stretching)
     Wire.setClock(1000000); // Max 1MHz
     Serial.println("Thermal camera initialized");
+  } else {
+    Serial.println("Camera module not found, check connections and restart the device");
+
+    therm_frame.fillScreen(ST77XX_BLACK);
+    therm_frame.setCursor(0, 15);
+    therm_frame.setTextSize(3);
+    therm_frame.setTextColor(ST77XX_RED);
+    therm_frame.print("Camera\nmodule\nnot\nfound");
+    tft.drawRGBBitmap(0, 15, therm_frame.getBuffer(), therm_frame.width(), therm_frame.height());
+
+    while (true) {
+      delay(1000);
+    }
   }
 }
 
