@@ -225,24 +225,17 @@ void setup() {
   /* MISC INIT */
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(0, INPUT_PULLUP); // Pulled HIGH (boot button)
-  pinMode(1, INPUT); // Pulled LOW (for interrupts)
-  pinMode(2, INPUT); // Pulled LOW (for interrupts)
+  pinMode(1, INPUT_PULLDOWN); // Pulled LOW (for interrupts)
+  pinMode(2, INPUT_PULLDOWN); // Pulled LOW (for interrupts)
 
-  gpio_wakeup_enable(GPIO_NUM_2, GPIO_INTR_HIGH_LEVEL);
-  esp_sleep_enable_gpio_wakeup();
-
-  for (uint16_t i = 0; i < 500; i++) {
-    if (digitalRead(2)) {
-      digitalWrite(LED_BUILTIN, HIGH);
-      Serial.printf("Sleeping device...\n");
-      delay(2000);
-      digitalWrite(LED_BUILTIN, LOW);
-      esp_light_sleep_start();
-    }
-    delay(1);
+  // Enter sleep mode on boot (temporary, will move to more elegant solution with deep sleep later)
+  if (digitalRead(2)) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    Serial.printf("Sleeping device, hit reset to wake up...\n");
+    delay(2000);
+    digitalWrite(LED_BUILTIN, LOW);
+    esp_light_sleep_start();
   }
-
-  gpio_wakeup_disable(GPIO_NUM_2);
 
   /* PMIC INIT */
   Serial.println("Setting up PMIC...");
