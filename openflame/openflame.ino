@@ -44,24 +44,24 @@ const uint16_t camColors[] = {0x480F,
 
 // Misc. objects
 enum mode_enum {
-  FUNC_UNIT, // Min, max, and crosshair temperature readouts
-  FUNC_MIRROR,
-  FUNC_MAXTEMP,
-  FUNC_MINTEMP,
   FUNC_AUTO,
   FUNC_REFRESH,
+  FUNC_MINTEMP,
+  FUNC_MAXTEMP,
   FUNC_RENDER,
+  FUNC_MIRROR,
+  FUNC_UNIT, // Min, max, and crosshair temperature readouts
 };
 char mode_strs[8][8] = {
-  "UNIT",
-  "MIRROR",
-  "MAXTEMP",
-  "MINTEMP",
   "AUTO",
   "REFRESH",
+  "MINTEMP",
+  "MAXTEMP",
   "RENDER",
+  "MIRROR",
+  "UNIT",
 };
-int8_t mode_func = FUNC_RENDER;
+int8_t mode_func = FUNC_AUTO;
 
 // Battery objects
 float batt_volts;
@@ -81,9 +81,9 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
 int16_t min_temp = 20;
 int16_t max_temp = 35;
 bool auto_range = false;
-float min_max_pad = 1.05;
+const float min_max_pad = 1;
 float frame[FRAME_WIDTH*FRAME_HEIGHT]; // Thermal frame buffer
-char render_strs[2][6] = { "INTLC", "CHESS" };
+const char render_strs[2][6] = { "INTLC", "CHESS" };
 uint8_t refresh_rates[8] = {0, 1, 2, 4, 8, 16, 32, 64};
 Adafruit_MLX90640 mlx; // Thermal camera
 
@@ -102,17 +102,19 @@ void getBattery() {
 
 // Handles camera setting changes
 void handleMode() {
+  const uint8_t pressed = getPressed();
+
   // If middle button is pressed, change the setting to edit
-  if (getPressed() & 1<<1) {
-    if (getPressed() & 1<<2) { mode_func++; delay(100); }
-    if (getPressed() & 1<<0) { mode_func--; delay(100); }
+  if (pressed & 1<<1) {
+    if (pressed & 1<<2) { mode_func--; delay(100); }
+    if (pressed & 1<<0) { mode_func++; delay(100); }
 
     // Clamp, no menu wrap (maybe make it an option?)
     if (mode_func > FUNC_RENDER) { mode_func = FUNC_RENDER; }
     if (mode_func < 0) { mode_func = 0; }
   } else {
-    // If only up is pressed, change values
-    if (getPressed() & 1<<2) {
+    // If up is pressed, change values
+    if (pressed & 1<<2) {
       switch (mode_func) {
         case FUNC_RENDER:
           mlx.setMode(MLX90640_CHESS); break;
@@ -127,8 +129,8 @@ void handleMode() {
       }
       delay(50); // vTaskDelay()
     }
-    // If only down is pressed, change values
-    if (getPressed() & 1<<0) {
+    // If down is pressed, change values
+    if (pressed & 1<<0) {
       switch (mode_func) {
         case FUNC_RENDER:
           mlx.setMode(MLX90640_INTERLEAVED); break;
