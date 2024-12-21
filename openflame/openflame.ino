@@ -85,6 +85,10 @@ const float min_max_pad = 1;
 float frame[FRAME_WIDTH*FRAME_HEIGHT]; // Thermal frame buffer
 const char render_strs[2][6] = { "INTLC", "CHESS" };
 uint8_t refresh_rates[8] = {0, 1, 2, 4, 8, 16, 32, 64};
+struct Extremes {
+  int16_t hotspot  = -500;
+  int16_t coldspot =  500;
+};
 Adafruit_MLX90640 mlx; // Thermal camera
 
 // Read button inputs in binary format (0 = released, 1 = pressed)
@@ -186,20 +190,26 @@ void drawStats() {
   tft.drawRGBBitmap(FRAME_WIDTH*RENDER_WIDTH_SCALE, 15, stats.getBuffer(), stats.width(), stats.height());
 }
 
+// Finds the hottest and coldest temperatures in the frame
+struct Extremes findExtremes() {
+  struct Extremes ex = { -500, 500 }; // [0] = hotspot, [1] = coldspot
+
+  for (uint16_t i=0; i < FRAME_WIDTH*FRAME_HEIGHT; i++) {
+    if (frame[i] > ex.hotspot) { ex.hotspot = (int16_t)frame[i]; }
+    if (frame[i] < ex.coldspot) { ex.coldspot = (int16_t)frame[i]; }
+  }
+
+  return ex;
+}
+
 // Draws the frame from the thermal camera to the display
 void drawThermalFrame() {
   // Automatically find hotspot and coldspot values and set as the new range
   if (auto_range && frame_count % AUTO_UPDATE_INTV == 0) {
-    int16_t hottest = -500;
-    int16_t coldest =  500;
+    struct Extremes extremes = findExtremes();
 
-    for (uint16_t i=0; i < FRAME_WIDTH*FRAME_HEIGHT; i++) {
-      if (frame[i] > hottest) { hottest = (int16_t)frame[i] * min_max_pad; }
-      if (frame[i] < coldest) { coldest = (int16_t)frame[i] * min_max_pad; }
-    }
-
-    max_temp = hottest;
-    min_temp = coldest;
+    max_temp = extremes.hotspot;
+    min_temp = extremes.coldspot;
   }
 
   // Update the screen buffer
@@ -261,7 +271,7 @@ void setup() {
   // tft.fillScreen(ST77XX_MAGENTA); // Available space behind everything
   tft.fillRect(0, 0, 240, 15, ST77XX_RED);
   tft.setCursor(8, 0);
-  tft.print("OpenFlame Cam v0.1a");
+  tft.print("OpenFlame ALPHA DEV");
   Serial.println("Display initialized");
 
   /* THERMAL CAM INIT */
