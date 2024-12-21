@@ -8,36 +8,44 @@ Special shoutout to Alex Tam, the Systems Architect for the Lake Monsters Roboti
 
 As it stands, it is pretty bare bones with nothing fancy happening.
 
-- Thermal image displayed on screen (32x24)
-- 16Hz refresh rate
+- Thermal image displayed on screen (32x24 camera resolution)
 - Small settings menu
-	- Change capture mode (CHESS/INTERLACE)
-	- Change refresh rate (16Hz/8Hz)
-	- Temperature range
-- FPS/Frametime (ms) counter
+  - Change capture mode (CHESS/INTERLACE)
+  - Change refresh rate (16Hz/8Hz)
+  - Temperature range settings (including an autorange toggle)
 - Battery % readout (a bit buggy)
+- Software on/off (not fully implemented)
 
-## Planned Features
+## Project Tracking
 
-**DISCLAIMER:** *This list is subject to change and should not be interpreted as a guaranteed promise.*
+All currently planned features are listed in the GitHub Projects tab of this repository. This should be the most up to date feature list for this project.
 
-- [ ] Bilinear/bicubic interpolation (for better image quality)
-- [ ] Automatic temperature ranging mode
-- [ ] Range colour settings
-- [ ] Hot and cold spot highlighting
-- [ ] Image saving and downloading to computer
-- [ ] Ambient temperature compensation? (requires populated BME680, also is inside case so probably won't be that useful)
-- [ ] Power management settings
-- [ ] OTA updates
+**DISCLAIMER:** *This list is subject to change and should not be interpreted as a guaranteed implementation.*
 
 ## Required Hardware
 
-- Adafruit Reverse TFT Feather ESP32-S2/3 (either works, untested with other feather boards)
-- Qwiic/Stemma QT 50mm or 100mm connector
-- 110 FOV or 55 FOV MLX90640 Breakout Module (110 for smaller targets, 55 for larger targets)
-- 1200mAh Lithium Ion Battery (life expectancy not measured)
-- M2.5 Metal Machine Screws (I used the one from Adafruit if you couldn't guess already)
+*Links and exact quantities have not been defined yet*
+
+- 1x Feather board *(choose one, either works)*
+  - [Adafruit Reverse TFT Feather ESP32-S2](https://www.adafruit.com/product/5345) (24.95$)
+  - [Adafruit Reverse TFT Feather ESP32-S3](https://www.adafruit.com/product/5691) (24.95$)
+- 1x Thermal Camera Module *(choose one, either works)*
+  - [Adafruit MLX90640 Thermal Camera Module - 55 Degree](https://www.adafruit.com/product/4407) (74.95$)
+  - [Adafruit MLX90640 Thermal Camera Module - 110 Degree](https://www.adafruit.com/product/4469) (74.95$)
+- 1x [3.7v 1200mAh Lithium Ion Battery](https://www.adafruit.com/product/258) (9.95$)
+- 1x [Qwiic/Stemma QT 100mm connector](https://www.adafruit.com/product/4210) (0.95$)
+- 1x M2.5 Machine Screw Set *(choose one, either works)*
+  - [Black Machine Screw Set](https://www.adafruit.com/product/3299) (16.95$)
+  - [White Machine Screw Set](https://www.adafruit.com/product/3658) (14.95$)
 - 3D printed case (print files and print settings found in `case-v0` folder)
+
+**TOTAL COST (one unit): $127.75\***
+
+\* Excludes price of 3D printed case
+
+### Hardware Assembly Instructions
+
+*Assembly instructions have not been created yet*
 
 ## Required Software
 
@@ -45,20 +53,9 @@ As it stands, it is pretty bare bones with nothing fancy happening.
 - Arduino IDE >v2.0
 - git
 
-### Arduino IDE Setup
-
-- Adafruit ESP32 board definitions (found on Adafruit website)
-- Adafruit MLX90640 library
-- Adafruit MAX1704X library
-- Adafruit ST7789 library
-
-### Installation Instructions
+### Firmware Installation Instructions
 
 *Installation instructions have not been created yet*
-
-## Project Tracking
-
-I eventually plan to create a GitHub Project for this repo (when I have a bit more time).
 
 ## Issues
 
