@@ -81,14 +81,14 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
 int16_t min_temp = 20;
 int16_t max_temp = 35;
 bool auto_range = false;
-const float min_max_pad = 1;
+const float min_max_pad = 0.00;
 float frame[FRAME_WIDTH*FRAME_HEIGHT]; // Thermal frame buffer
 const char render_strs[2][6] = { "INTLC", "CHESS" };
 uint8_t refresh_rates[8] = {0, 1, 2, 4, 8, 16, 32, 64};
-struct Extremes {
-  int16_t hotspot  = -500;
-  int16_t coldspot =  500;
-};
+typedef struct {
+  float hotspot  = -500;
+  float coldspot =  500;
+} Extremes;
 Adafruit_MLX90640 mlx; // Thermal camera
 
 // Read button inputs in binary format (0 = released, 1 = pressed)
@@ -191,12 +191,12 @@ void drawStats() {
 }
 
 // Finds the hottest and coldest temperatures in the frame
-struct Extremes findExtremes() {
-  struct Extremes ex = { -500, 500 }; // [0] = hotspot, [1] = coldspot
+Extremes findExtremes() {
+  Extremes ex = { -500, 500 }; // [0] = hotspot, [1] = coldspot
 
   for (uint16_t i=0; i < FRAME_WIDTH*FRAME_HEIGHT; i++) {
-    if (frame[i] > ex.hotspot) { ex.hotspot = (int16_t)frame[i]; }
-    if (frame[i] < ex.coldspot) { ex.coldspot = (int16_t)frame[i]; }
+    if (frame[i] > ex.hotspot)  { ex.hotspot  = frame[i]; }
+    if (frame[i] < ex.coldspot) { ex.coldspot = frame[i]; }
   }
 
   return ex;
@@ -206,10 +206,10 @@ struct Extremes findExtremes() {
 void drawThermalFrame() {
   // Automatically find hotspot and coldspot values and set as the new range
   if (auto_range && frame_count % AUTO_UPDATE_INTV == 0) {
-    struct Extremes extremes = findExtremes();
+    Extremes extremes = findExtremes();
 
-    max_temp = extremes.hotspot;
-    min_temp = extremes.coldspot;
+    max_temp = (int16_t)(extremes.hotspot  * (1 - min_max_pad));
+    min_temp = (int16_t)(extremes.coldspot * (1 + min_max_pad));
   }
 
   // Update the screen buffer
