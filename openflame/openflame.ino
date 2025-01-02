@@ -246,7 +246,7 @@ void setup() {
     Serial.printf("Sleeping device, hit reset to wake up...\n");
     delay(2000);
     digitalWrite(LED_BUILTIN, LOW);
-    esp_light_sleep_start();
+    esp_deep_sleep_start();
   }
 
   /* PMIC INIT */
