@@ -45,6 +45,7 @@ const uint16_t camColors[] = {0x480F,
 // Misc. objects
 enum mode_enum {
   FUNC_AUTO,
+  FUNC_SS,
   FUNC_REFRESH,
   FUNC_MINTEMP,
   FUNC_MAXTEMP,
@@ -54,6 +55,7 @@ enum mode_enum {
 };
 char mode_strs[8][8] = {
   "AUTO",
+  "SS",
   "REFRESH",
   "MINTEMP",
   "MAXTEMP",
@@ -80,9 +82,15 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
 // Thermal cam objects
 int16_t min_temp = 20;
 int16_t max_temp = 35;
+bool supersampling = false;
 bool auto_range = false;
 const float min_max_pad = 0.00;
 float frame[FRAME_WIDTH*FRAME_HEIGHT]; // Thermal frame buffer
+
+const uint SS_FRAME_WIDTH = FRAME_WIDTH*(5-2);
+const uint SS_FRAME_HEIGHT = FRAME_HEIGHT*(5-2);
+float ss_frame[SS_FRAME_WIDTH * SS_FRAME_HEIGHT]; // 5 is scaling factor, make separate file later
+
 const char render_strs[2][6] = { "INTLC", "CHESS" };
 uint8_t refresh_rates[8] = {0, 1, 2, 4, 8, 16, 32, 64};
 typedef struct {
@@ -130,6 +138,8 @@ void handleMode() {
           mlx.setRefreshRate(MLX90640_16_HZ); break;
         case FUNC_AUTO:
           auto_range = true; break;
+        case FUNC_SS:
+          supersampling = true; break;
       }
       delay(50); // vTaskDelay()
     }
@@ -146,6 +156,8 @@ void handleMode() {
           mlx.setRefreshRate(MLX90640_8_HZ); break;
         case FUNC_AUTO:
           auto_range = false; break;
+        case FUNC_SS:
+          supersampling = false; break;
       }
       delay(50); // vTaskDelay()
     }
@@ -178,6 +190,7 @@ void drawStats() {
   stats.printf("Mode: %s\n", mode_strs[mode_func]); stats.println();
   stats.printf("Render: %s\n", render_strs[mlx.getMode()]);
   stats.printf("Refresh: %dHz\n", refresh_rates[mlx.getRefreshRate()]);
+  stats.printf("SS Filter: %d\n", supersampling);
   stats.printf("Auto Range: %d\n", auto_range);
   stats.printf("Min Temp: %d\nMax Temp: %d\n", min_temp, max_temp);
 
@@ -202,6 +215,82 @@ Extremes findExtremes() {
   return ex;
 }
 
+// Applies a bilinear supersampling filter to the image
+void supersample(float input[], float output[], uint8_t width, uint8_t height, uint8_t scale) {
+  // Set constants
+  if ((scale < width) && (scale < height)) {
+    (width > height) ? scale = height : scale = width;
+  }
+
+  const int SS_WIDTH = width*(scale-2);
+  const int SS_HEIGHT = height*(scale-2);
+  const int BUF_SIZE = SS_WIDTH*SS_HEIGHT;
+
+  float ss_buf[SS_WIDTH*height]; // Interpolated rows buffer
+
+  for (uint h=0; h < height; h++) {
+    float ss_row[SS_WIDTH];
+
+    for (uint w; w < width; w++) {
+      float t1;
+      float t2;
+
+      if (w+1 != width) {
+        t1 = input[h*width + w];
+        t2 = input[h*width + w+1];
+      } else {
+        break;
+      }
+
+      float dt = t2-t1;
+      float step = dt / (scale-1);
+
+      for (uint i=0; i < scale; i++) {
+        uint idx = w*(scale-1) + i;
+        if (idx >= SS_WIDTH) break;
+        float val = t1 + (step*i);
+        ss_row[idx] = val;
+      }
+    }
+
+    for (uint i=0; i < SS_WIDTH; i++) {
+      uint idx = (h*SS_WIDTH) + i;
+      ss_buf[idx] = ss_row[i];
+    }
+  }
+
+  for (uint w=0; w < SS_WIDTH; w++) {
+    float ss_col[SS_HEIGHT];
+
+    for (uint h=0; h < height; h++) {
+      float t1;
+      float t2;
+
+      if (h+1 != height) {
+        t1 = input[h*SS_WIDTH + w];
+        t2 = input[(h+1)*SS_WIDTH + w];
+      } else {
+        break;
+      }
+
+      float dt = t2-t1;
+      float step = dt / (scale-1);
+
+      for (uint i=0; i < scale; i++) {
+        uint idx = h*(scale-1) + i;
+        if (idx >= SS_HEIGHT) break;
+        float val = t1 + (step*i);
+        ss_col[idx] = val;
+      }
+    }
+
+    for (uint i=0; i < SS_HEIGHT; i++) {
+      uint idx = (i*SS_WIDTH) + w;
+      output[idx] = ss_col[i];
+    }
+  }
+}
+
 // Draws the frame from the thermal camera to the display
 void drawThermalFrame() {
   // Automatically find hotspot and coldspot values and set as the new range
@@ -213,15 +302,34 @@ void drawThermalFrame() {
   }
 
   // Update the screen buffer
-  for (uint8_t h=0; h<FRAME_HEIGHT; h++) {
-    for (uint8_t w=0; w<FRAME_WIDTH; w++) {
-      // Read a temperature and clamp it between set temperature range
-      float t = frame[h*FRAME_WIDTH + w];
-      t = constrain(t, min_temp, max_temp);
+  therm_frame.fillScreen(ST77XX_BLACK);
+  if (supersampling) {
+    supersample(frame, ss_frame, 32, 24, 5);
 
-      // Map the colour index to a colour and draw the pixel
-      uint8_t colorIndex = map(t, min_temp, max_temp, 0, 255);
-      therm_frame.fillRect((FRAME_WIDTH*RENDER_WIDTH_SCALE-RENDER_WIDTH_SCALE)-(RENDER_WIDTH_SCALE * w), (RENDER_HEIGHT_SCALE * h), RENDER_WIDTH_SCALE, RENDER_HEIGHT_SCALE, camColors[colorIndex]);
+    for (uint h=0; h<SS_FRAME_HEIGHT; h++) {
+      for (uint w=0; w<SS_FRAME_WIDTH; w++) {
+        // Read a temperature and clamp it between set temperature range
+        float t = ss_frame[h*FRAME_WIDTH + w];
+        t = constrain(t, min_temp, max_temp);
+
+        // Map the colour index to a colour and draw the pixel
+        uint8_t colorIndex = map(t, min_temp, max_temp, 0, 255);
+
+        therm_frame.fillRect((FRAME_WIDTH-1)-w, h, 1, 1, camColors[colorIndex]);
+      }
+    }
+  } else {
+    for (uint8_t h=0; h<FRAME_HEIGHT; h++) {
+      for (uint8_t w=0; w<FRAME_WIDTH; w++) {
+        // Read a temperature and clamp it between set temperature range
+        float t = frame[h*FRAME_WIDTH + w];
+        t = constrain(t, min_temp, max_temp);
+
+        // Map the colour index to a colour and draw the pixel
+        uint8_t colorIndex = map(t, min_temp, max_temp, 0, 255);
+
+        therm_frame.fillRect((FRAME_WIDTH*RENDER_WIDTH_SCALE-RENDER_WIDTH_SCALE)-(RENDER_WIDTH_SCALE * w), (RENDER_HEIGHT_SCALE * h), RENDER_WIDTH_SCALE, RENDER_HEIGHT_SCALE, camColors[colorIndex]);
+      }
     }
   }
 
