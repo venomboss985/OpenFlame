@@ -12,6 +12,11 @@
 #define RENDER_HEIGHT_SCALE 5
 #define AUTO_UPDATE_INTV 2
 
+// Button constants
+#define UP_BTN 1<<2
+#define MID_BTN 1<<1
+#define DOWN_BTN 1<<0
+
 // Colors for displaying thermal image (update to generate colour range on the fly and with set bit-depths)
 const uint16_t camColors[] = {0x480F,
   0x400F,0x400F,0x400F,0x4010,0x3810,0x3810,0x3810,0x3810,0x3010,0x3010,
@@ -45,21 +50,17 @@ const uint16_t camColors[] = {0x480F,
 // Misc. objects
 enum mode_enum {
   FUNC_AUTO,
-  FUNC_REFRESH,
-  FUNC_MINTEMP,
   FUNC_MAXTEMP,
-  FUNC_RENDER,
-  FUNC_MIRROR,
-  FUNC_UNIT, // Min, max, and crosshair temperature readouts
+  FUNC_MINTEMP,
+  // FUNC_MIRROR,
+  FUNC_VARS, // Temp units, refreshrate, battery settings, and crosshair temperature readouts
 };
 char mode_strs[8][8] = {
   "AUTO",
-  "REFRESH",
-  "MINTEMP",
-  "MAXTEMP",
-  "RENDER",
-  "MIRROR",
-  "UNIT",
+  "MAXTMP",
+  "MINTMP",
+  // "MIRROR",
+  "VARS",
 };
 int8_t mode_func = FUNC_AUTO;
 
@@ -73,6 +74,7 @@ Adafruit_MAX17048 batt; // Check out other functions, this PMIC is really cool
 float fps = 0;
 uint8_t mspf = 0;
 uint8_t frame_count = 0;
+bool set_mode = false;
 GFXcanvas16 therm_frame(FRAME_WIDTH*RENDER_WIDTH_SCALE, FRAME_HEIGHT*RENDER_HEIGHT_SCALE); // Thermal camera frame
 GFXcanvas16 stats(240-FRAME_WIDTH*RENDER_WIDTH_SCALE, 135-15); // Status and settings menu
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); // Display
@@ -109,47 +111,44 @@ void handleMode() {
   const uint8_t pressed = getPressed();
 
   // If middle button is pressed, change the setting to edit
-  if (pressed & 1<<1) {
-    if (pressed & 1<<2) { mode_func--; delay(100); }
-    if (pressed & 1<<0) { mode_func++; delay(100); }
-
-    // Clamp, no menu wrap (maybe make it an option?)
-    if (mode_func > FUNC_RENDER) { mode_func = FUNC_RENDER; }
-    if (mode_func < 0) { mode_func = 0; }
+  if (pressed & MID_BTN) {
+    // Toggle between setting switch and interact
+    (set_mode && pressed == MID_BTN) ? set_mode = false : set_mode = true;
+    delay(50);
   } else {
     // If up is pressed, change values
-    if (pressed & 1<<2) {
+    if (pressed & UP_BTN && !set_mode) {
       switch (mode_func) {
-        case FUNC_RENDER:
-          mlx.setMode(MLX90640_CHESS); break;
         case FUNC_MINTEMP:
           if (!auto_range) { min_temp++; } break;
         case FUNC_MAXTEMP:
           if (!auto_range) { max_temp++; } break;
-        case FUNC_REFRESH:
-          mlx.setRefreshRate(MLX90640_16_HZ); break;
         case FUNC_AUTO:
           auto_range = true; break;
       }
       delay(50); // vTaskDelay()
     }
     // If down is pressed, change values
-    if (pressed & 1<<0) {
+    if (pressed & DOWN_BTN && !set_mode) {
       switch (mode_func) {
-        case FUNC_RENDER:
-          mlx.setMode(MLX90640_INTERLEAVED); break;
         case FUNC_MINTEMP:
           if (!auto_range) { min_temp--; } break;
         case FUNC_MAXTEMP:
           if (!auto_range) { max_temp--; } break;
-        case FUNC_REFRESH:
-          mlx.setRefreshRate(MLX90640_8_HZ); break;
         case FUNC_AUTO:
           auto_range = false; break;
       }
       delay(50); // vTaskDelay()
     }
   }
+
+  // Select menu item to start editing
+  if (set_mode && pressed & UP_BTN) { mode_func--; }
+  if (set_mode && pressed & DOWN_BTN) { mode_func++; }
+
+  // Clamp, no menu wrap (maybe make it an option?)
+  if (mode_func > FUNC_MINTEMP) { mode_func = FUNC_MINTEMP; }
+  if (mode_func < 0) { mode_func = 0; }
 }
 
 // Draw the stats menu (13 characters @ 15 lines max)
@@ -157,6 +156,7 @@ void drawStats() {
   stats.fillScreen(ST77XX_BLACK);
   // stats.drawRect(0, 0, 240-FRAME_WIDTH*RENDER_WIDTH_SCALE, 135-15, ST77XX_WHITE); // Stats/menu area
   stats.setCursor(0, 0); // Set cursor to 1, 1 if drawing bounding box
+  stats.setTextSize(1);
 
   // Change battery % colour
   switch ((int)batt_percent) {
@@ -169,23 +169,35 @@ void drawStats() {
   }
   // Unless charging which forces green
   if (charge_rate > 0) stats.setTextColor(ST77XX_GREEN);
-  stats.printf("Battery: %.00f%%\n", batt_percent);
+  stats.printf(" Battery: %.00f%%\n", batt_percent);
   // stats.printf("%%/hr: %.02f%%\n", charge_rate);
   stats.setTextColor(ST77XX_WHITE);
   // stats.printf("Buttons: 0x%02X\n", getPressed());
 
+  // Print large temperature display
+  int16_t crosshair_temp = frame[FRAME_WIDTH*FRAME_HEIGHT/2];
+
+  stats.setTextSize(2); stats.printf("\n"); // Upper margin
+  stats.setTextSize(3);
+  stats.setTextColor(ST77XX_RED);   stats.printf(" %dC\n", max_temp);
+  stats.setTextColor(ST77XX_WHITE); stats.printf(" %dC\n", crosshair_temp);
+  stats.setTextColor(ST77XX_CYAN);  stats.printf(" %dC\n", min_temp);
+
   // Print the temperature range settings in the stats menu
-  stats.printf("Mode: %s\n", mode_strs[mode_func]); stats.println();
-  stats.printf("Render: %s\n", render_strs[mlx.getMode()]);
-  stats.printf("Refresh: %dHz\n", refresh_rates[mlx.getRefreshRate()]);
-  stats.printf("Auto Range: %d\n", auto_range);
-  stats.printf("Min Temp: %d\nMax Temp: %d\n", min_temp, max_temp);
+  stats.setTextSize(1);
+  stats.setTextColor(ST77XX_WHITE);
+  stats.printf("\n"); // Lower margin
+  (auto_range) ? stats.setTextColor(ST77XX_GREEN) : stats.setTextColor(ST77XX_RED);
+  stats.printf(" Auto Range\n");
+  (set_mode) ? stats.setTextColor(ST77XX_MAGENTA) : stats.setTextColor(ST77XX_WHITE);
+  stats.printf(" Mode: %s\n", mode_strs[mode_func]); stats.println();
 
   // Print the framerate in the bottom right
-  stats.setCursor(0, 104);
-  stats.printf("FPS: %.2f", fps);
-  stats.setCursor(0, 112);
-  stats.printf("FT (ms): %d", mspf);
+  // stats.setTextSize(1);
+  // stats.setCursor(0, 104);
+  // stats.printf("FPS: %.2f", fps);
+  // stats.setCursor(0, 112);
+  // stats.printf("FT (ms): %d", mspf);
 
   tft.drawRGBBitmap(FRAME_WIDTH*RENDER_WIDTH_SCALE, 15, stats.getBuffer(), stats.width(), stats.height());
 }
@@ -225,6 +237,12 @@ void drawThermalFrame() {
     }
   }
 
+  // Draw a crosshair
+  therm_frame.setCursor((therm_frame.width()/2)+RENDER_WIDTH_SCALE, (therm_frame.height()/2)-RENDER_HEIGHT_SCALE);
+  // therm_frame.setCursor((FRAME_WIDTH*RENDER_WIDTH_SCALE)/2, (FRAME_WIDTH*RENDER_HEIGHT_SCALE)/2);
+  therm_frame.drawFastHLine(therm_frame.getCursorX()-3, therm_frame.getCursorY(), 7, ST77XX_WHITE);
+  therm_frame.drawFastVLine(therm_frame.getCursorX(), therm_frame.getCursorY()-3, 7, ST77XX_WHITE);
+
   // Draw the frame buffer to the screen
   tft.drawRGBBitmap(0, 15, therm_frame.getBuffer(), therm_frame.width(), therm_frame.height());
   frame_count++;
@@ -232,6 +250,7 @@ void drawThermalFrame() {
 }
 
 void setup() {
+  setCpuFrequencyMhz(160);
   Serial.begin(115200);
 
   /* MISC INIT */
