@@ -52,14 +52,12 @@ enum mode_enum {
   FUNC_AUTO,
   FUNC_MAXTEMP,
   FUNC_MINTEMP,
-  // FUNC_MIRROR,
   FUNC_VARS, // Temp units, refreshrate, battery settings, and crosshair temperature readouts
 };
-char mode_strs[8][8] = {
+const char mode_strs[8][8] = {
   "AUTO",
   "MAXTMP",
   "MINTMP",
-  // "MIRROR",
   "VARS",
 };
 int8_t mode_func = FUNC_AUTO;
@@ -103,7 +101,6 @@ void getBattery() {
   batt_volts = batt.cellVoltage();
   batt_percent = constrain(batt.cellPercent(), 0., 100.);
   charge_rate = batt.chargeRate();
-  // delay(1000);
 }
 
 // Handles camera setting changes
@@ -159,7 +156,7 @@ void drawStats() {
   stats.setTextSize(1);
 
   // Change battery % colour
-  switch ((int)batt_percent) {
+  switch ((uint)batt_percent) {
     case  21 ... 50:
       stats.setTextColor(ST77XX_YELLOW); break;
     case  0 ... 20:
@@ -169,12 +166,12 @@ void drawStats() {
   }
   // Unless charging which forces green
   if (charge_rate > 0) stats.setTextColor(ST77XX_GREEN);
-  stats.printf(" Battery: %.00f%%\n", batt_percent);
+  stats.printf(" Batt.: %.00f%%\n", batt_percent);
   // stats.printf("%%/hr: %.02f%%\n", charge_rate);
   stats.setTextColor(ST77XX_WHITE);
   // stats.printf("Buttons: 0x%02X\n", getPressed());
 
-  // Print large temperature display
+  // Average sample crosshair temperature (close to center)
   int16_t crosshair_temp =
     ( frame[(FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2) - FRAME_WIDTH-2] // TOP RIGHT OF CROSSHAIR
     + frame[(FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2) - FRAME_WIDTH-1] // TOP LEFT OF CROSSHAIR
@@ -182,6 +179,7 @@ void drawStats() {
     + frame[(FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2)-1]               // BOTTOM LEFT OF CROSSHAIR
     ) / 4;
 
+  // Print temperature range and crosshair readout
   stats.setTextSize(2); stats.printf("\n"); // Upper margin
   stats.setTextSize(3);
   stats.setTextColor(ST77XX_RED);   stats.printf(" %dC\n", max_temp);
@@ -195,7 +193,7 @@ void drawStats() {
   (auto_range) ? stats.setTextColor(ST77XX_GREEN) : stats.setTextColor(ST77XX_RED);
   stats.printf(" Auto Range\n");
   (set_mode) ? stats.setTextColor(ST77XX_MAGENTA) : stats.setTextColor(ST77XX_WHITE);
-  stats.printf(" Mode: %s\n", mode_strs[mode_func]); stats.println();
+  stats.printf(" Set: %s\n", mode_strs[mode_func]); stats.println();
 
   // Print the framerate in the bottom right
   // stats.setTextSize(1);
@@ -254,14 +252,20 @@ void drawThermalFrame() {
 }
 
 void setup() {
+  /* ESP32 SETUP */
   setCpuFrequencyMhz(160);
-  Serial.begin(115200);
 
   /* MISC INIT */
+  Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(0, INPUT_PULLUP); // Pulled HIGH (boot button)
   pinMode(1, INPUT_PULLDOWN); // Pulled LOW (for interrupts)
   pinMode(2, INPUT_PULLDOWN); // Pulled LOW (for interrupts)
+
+  /* PMIC INIT */
+  Serial.println("Setting up PMIC...");
+  batt.begin();
+  Serial.println("PMIC initialized");
 
   // Enter sleep mode on boot (temporary, will move to more elegant solution with deep sleep later)
   if (digitalRead(2)) {
@@ -269,13 +273,11 @@ void setup() {
     Serial.printf("Sleeping device, hit reset to wake up...\n");
     delay(2000);
     digitalWrite(LED_BUILTIN, LOW);
+
+    batt.enableSleep(true);
+    batt.sleep(true);
     esp_deep_sleep_start();
   }
-
-  /* PMIC INIT */
-  Serial.println("Setting up PMIC...");
-  batt.begin();
-  Serial.println("PMIC initialized");
 
   /* DISPLAY INIT */
   Serial.println("Setting up display...");
