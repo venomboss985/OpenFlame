@@ -229,23 +229,12 @@ void drawThermalFrame() {
     min_temp = (int16_t)(extremes.coldspot * (1 + min_max_pad));
   }
 
-  // uint16_t crosshair_point = (FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2) - FRAME_WIDTH-2; // TOP RIGHT
-  // uint16_t crosshair_point = (FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2) - FRAME_WIDTH-1; // TOP LEFT
-
-  // uint16_t crosshair_point = (FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2)-2; // BOTTOM RIGHT
-  // uint16_t crosshair_point = (FRAME_WIDTH*FRAME_HEIGHT/2) - (FRAME_WIDTH/2)-1; // BOTTOM LEFT
-
   // Update the screen buffer
   for (uint8_t h=0; h<FRAME_HEIGHT; h++) {
     for (uint8_t w=0; w<FRAME_WIDTH; w++) {
       // Read a temperature and clamp it between set temperature range
       float t = frame[h*FRAME_WIDTH + w];
       t = constrain(t, min_temp, max_temp);
-
-      // if (crosshair_point == h*FRAME_WIDTH + w) {
-      //   therm_frame.fillRect((FRAME_WIDTH*RENDER_WIDTH_SCALE-RENDER_WIDTH_SCALE)-(RENDER_WIDTH_SCALE * w), (RENDER_HEIGHT_SCALE * h), RENDER_WIDTH_SCALE, RENDER_HEIGHT_SCALE, ST77XX_WHITE);
-      //   continue;
-      // }
 
       // Map the colour index to a colour and draw the pixel
       uint8_t colorIndex = map(t, min_temp, max_temp, 0, 255);
