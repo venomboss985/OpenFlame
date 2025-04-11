@@ -10,10 +10,8 @@ As it stands, it is pretty bare bones with nothing fancy happening.
 
 - Thermal image displayed on screen (32x24 camera resolution)
 - Small settings menu
-  - Change capture mode (CHESS/INTERLACE)
-  - Change refresh rate (16Hz/8Hz)
   - Temperature range settings (including an autorange toggle)
-- Battery % readout (a bit buggy)
+- Battery % indicator (a bit slow)
 - Software on/off (not fully implemented)
 
 ## Project Tracking
@@ -41,7 +39,7 @@ All currently planned features are listed in the GitHub Projects tab of this rep
 
 **TOTAL COST (one unit): $127.75\***
 
-\* Excludes price of 3D printed case
+\* Excludes price of 3D printed case, shipping, and taxes
 
 ### Hardware Assembly Instructions
 
@@ -57,9 +55,13 @@ All currently planned features are listed in the GitHub Projects tab of this rep
 
 *Installation instructions have not been created yet*
 
+## User Guide
+
+*User guide has not been created yet*
+
 ## Issues
 
-This is effectively alpha firmware and as such, bugs are expected. If you do come across an issue attempting to set up, please write an issue with as much information as possible so I can help as best I can. A template is coming soon :TM:.
+This is effectively alpha firmware and as such, bugs are expected. If you do come across an issue attempting to set up, please write an issue with as much information as possible so I can help as best I can. A template is coming soon™.
 
 ## Contributing
 
